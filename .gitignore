@@ -1,0 +1,13 @@
+# secrets & machine-specific config
+.github_token
+config.local.sh
+
+# run artefacts — screenshots can capture notification banners, and the JSON
+# and reports contain real personal usage data
+out/
+shots/
+docs/*.local.*
+
+__pycache__/
+*.pyc
+.DS_Store
