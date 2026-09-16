@@ -162,6 +162,16 @@ single day matched all 21 apps on that day exactly.
   navigation into 5 seconds.
 - **Tapping the status bar** is iOS's scroll-to-top gesture — one tap instead of
   a dozen swipes.
+- **Where a scroll drag *starts* decides whether it scrolls at all.** A drag
+  from `y=700` moves the page by exactly 0 pt — measured at both 0.3 s and
+  0.6 s — while `y=780` moves ~410 pt at either duration. Some days' layouts put
+  something at 700 that swallows the pan; the duration is a red herring. This
+  failed silently and cost four days of a nine-day run: the pass sat on screen
+  one, read the two rows above the fold, decided the list had ended, and
+  reported every app below it as unused (13 Sep's GitHub, 34 min, came out as
+  "–"). `scroll_step` now escalates through three gestures and **confirms the
+  view actually moved** by diffing row positions, and a day counts as read only
+  once the pickups header is reached — otherwise it is retried, then flagged.
 - **Screenshots can catch notification banners.** `shots/` is gitignored for
   this reason; check any screenshot before sharing it.
 

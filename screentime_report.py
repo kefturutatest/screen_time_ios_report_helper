@@ -127,6 +127,9 @@ class ScreenTime:
     def __init__(self, d, verbose=True):
         self.d = d
         self.verbose = verbose
+        # Set by read_day_apps: did the pass actually reach the end of the
+        # "Más usadas" list, or did it give up part-way?
+        self.last_read_complete = False
 
     def log(self, *a):
         if self.verbose:
@@ -310,6 +313,7 @@ class ScreenTime:
         obs = {}
         expanded = 0
         stale = 0
+        reached_end = False
         for _ in range(max_steps):
             tree = self.tree()
             nodes = [n for n, _ in wda.walk(tree)]
@@ -341,16 +345,58 @@ class ScreenTime:
                 continue
 
             stale = stale + 1 if len(obs) == before else 0
-            passed = any(wda.text_of(n) in NEXT_SECTIONS and self.visible(n)
-                         for n in nodes)
-            if passed or (stale >= 4 and obs):
+
+            # Reaching the pickups / notifications header is the only proof
+            # that the whole "Más usadas" list went past. Anything else is a
+            # guess, and a wrong guess is silent: a day whose list stopped
+            # early reads as "the app wasn't used", identical to a real zero.
+            if any(wda.text_of(n) in NEXT_SECTIONS and self.visible(n)
+                   for n in nodes):
+                reached_end = True
+                break
+
+            # A run of steps that adds nothing usually means the scroll is
+            # wedged rather than that the list ended, so be slow to conclude we
+            # are done — and leave `reached_end` false, which makes the caller
+            # retry the day and, failing that, flag it rather than publish it.
+            if stale >= 8 and obs:
                 break
 
             # Short steps so consecutive snapshots overlap: every row gets read
             # at least twice, which is what makes the vote meaningful.
-            self.d.swipe(195, 700, 195, 430, 0.3)
-            time.sleep(1.4)
+            if not self.scroll_step(tree):
+                stale += 1
+        self.last_read_complete = reached_end
         return self._tally(obs)
+
+    # A drag beginning at y=700 is swallowed on some days' layouts and scrolls
+    # the page by exactly nothing, however long it lasts — measured: (700->430)
+    # moves 0pt at both 0.3s and 0.6s, while (780->510) moves ~410pt at both.
+    # The start point is what matters, not the duration. Left unchecked this is
+    # silent: the pass keeps reading screen one, sees no new rows, concludes the
+    # list ended, and every app below the fold is reported as unused.
+    SWIPES = ((780, 480, 0.6), (800, 200, 0.8), (820, 140, 1.0))
+
+    def scroll_step(self, tree=None):
+        """Scroll down one step. -> True if the view actually moved.
+
+        Escalates through progressively larger gestures rather than trusting
+        any single one, and confirms movement by watching the visible rows
+        instead of assuming the swipe landed.
+        """
+        before = self._scroll_sig(tree)
+        for x1, y1, dur in self.SWIPES:
+            self.d.swipe(195, x1, 195, y1, dur)
+            time.sleep(1.4)
+            if self._scroll_sig() != before:
+                return True
+        return False
+
+    def _scroll_sig(self, tree=None):
+        """Where the list is sitting, as the (label, y) of each visible row."""
+        return tuple((wda.text_of(n), (n.get("rect") or {}).get("y"))
+                     for n in self.nodes(tree)
+                     if n.get("type") == "Cell" and self.visible(n))
 
     @staticmethod
     def _tally(obs):
@@ -460,9 +506,23 @@ def main():
         cur = st.goto_date(d_to, ref, cur)
 
     days = {}
+    incomplete = []
     while True:
         st.log(f"· reading {cur} …")
+        # A read that never reached the pickups header saw only part of the
+        # list, and the missing tail is indistinguishable from unused apps.
+        # Retry, keeping the fullest attempt.
         apps = st.read_day_apps()
+        for attempt in range(2):
+            if st.last_read_complete:
+                break
+            st.log(f"    incomplete read ({len(apps)} apps) — retrying")
+            again = st.read_day_apps()
+            if len(again) > len(apps) or st.last_read_complete:
+                apps = again
+        if not st.last_read_complete:
+            incomplete.append(cur.isoformat())
+            st.log(f"    !! still incomplete — {cur} may be under-reported")
         days[cur.isoformat()] = apps
         d.screenshot(os.path.join(SHOTS, f"day_{cur.isoformat()}.png"))
         st.log(f"    {len(apps)} apps")
@@ -477,6 +537,11 @@ def main():
 
     drop_torn_rows(days, log=st.log)
     print_report(days, args.apps, d_from, d_to)
+    if incomplete:
+        print("\n!! These days' app lists were read only partially, so a '–' on "
+              "them means 'not seen', NOT 'not used':")
+        for k in incomplete:
+            print(f"     {k}")
 
 
 def drop_torn_rows(days, log=print):
