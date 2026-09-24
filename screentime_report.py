@@ -332,12 +332,21 @@ class ScreenTime:
                             r.get("y", 0) + r.get("height", 0) <= self.VIEWPORT_BOTTOM:
                         self._absorb_cell(n, obs)
 
-            # "Mostrar más" (bare, no .0/.1 suffix) belongs to "Más usadas";
-            # the pickups and notifications lists get suffixed identifiers.
-            # It has to be on screen for the tap to land.
-            more = [n for n in nodes
-                    if n.get("type") == "Cell" and self.visible(n)
-                    and wda.text_of(n) in ("Mostrar más", "Mostrar Más", "Show More")]
+            # Which "Mostrar más" belongs to "Más usadas" is decided by
+            # position — it is the one above the pickups header — never by its
+            # identifier. The identifier is recycled like any cell's: the usage
+            # list's button has been seen as "Mostrar más.1", and matching only
+            # the bare name left whole weeks collapsed at the top 7 apps, with
+            # everything below reading as unused. It has to be on screen for
+            # the tap to land.
+            header_y = min((self._y(n) for n in nodes
+                            if wda.text_of(n) in NEXT_SECTIONS and self.visible(n)),
+                           default=None)
+            more = sorted((n for n in nodes
+                           if n.get("type") == "Cell" and self.visible(n)
+                           and self._is_show_more(n)
+                           and (header_y is None or self._y(n) < header_y)),
+                          key=self._y)
             if more and expanded < 5:
                 expanded += 1
                 self.tap_node(more[0], wait=2.0)
@@ -391,6 +400,17 @@ class ScreenTime:
             if self._scroll_sig() != before:
                 return True
         return False
+
+    SHOW_MORE_RE = re.compile(r"^(mostrar más|show more)(\.\d+)?$", re.I)
+
+    @classmethod
+    def _is_show_more(cls, node):
+        return any(cls.SHOW_MORE_RE.match((node.get(k) or "").strip())
+                   for k in ("label", "name"))
+
+    @staticmethod
+    def _y(node):
+        return (node.get("rect") or {}).get("y", 0)
 
     def _scroll_sig(self, tree=None):
         """Where the list is sitting, as the (label, y) of each visible row."""

@@ -149,8 +149,16 @@ single day matched all 21 apps on that day exactly.
 - **Off-screen rows report a collapsed rect** pinned to the table's top edge, so
   their coordinates say nothing about which way to scroll. Use `isVisible` and
   scroll in one direction; don't do rect maths to decide direction.
-- **Three "Mostrar más" buttons on the page.** The usage list's is the bare
-  `Mostrar más`; pickups and notifications get `.0` / `.1` suffixes.
+- **Three "Mostrar más" buttons on the page — tell them apart by position,
+  not name.** Their identifiers carry `.0` / `.1` suffixes, but which button
+  gets which is recycled like any cell's: the usage list's own button has shown
+  up as `Mostrar más.1`. Matching only the bare name left a whole run collapsed
+  at the top 7 apps per day, with every tracked app ranked lower reading as
+  "–" (a 9-day report lost 41 minutes across 17 cells, including a day shown
+  as unused that had 10 min of Claude). The usage list's button is the one
+  **above the "Resumen de consultas" header**; `read_day_apps` matches the
+  label or name with any suffix and taps only a button above that header.
+  A flat 7 apps on every day is the tell that it isn't expanding.
 - **Pickups and notifications list the same apps** just below "Más usadas", with
   bare integer counts. A row counts as usage only if it has *both* a bundle id
   and a value that parses as a duration — that filter, not scroll position, is
