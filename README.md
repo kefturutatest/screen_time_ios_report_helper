@@ -98,12 +98,24 @@ Time activity screen"*. Nothing can recover this unattended: WDA's `/wda/unlock`
 only wakes and swipes, it cannot type a passcode.
 
 Set **Settings › Display & Brightness › Auto-Lock → Never** for the run (and put
-it back after). To check mid-run:
+it back after). **Low Power Mode overrides it**: with Low Power Mode on, iOS
+caps Auto-Lock at 30 s whatever the setting says, so a phone showing "Never"
+still locks a minute into the run. It switches itself on at 20% battery. The
+raw data is saved after every day, so a run that dies keeps what it read; rerun
+with `TO` set to the day before the oldest one saved. To check mid-run:
 
 ```bash
 SID=$(curl -s http://$PHONE_HOST:8100/status | python3 -c 'import json,sys;print(json.load(sys.stdin)["sessionId"])')
 curl -s "http://$PHONE_HOST:8100/session/$SID/wda/locked"   # {"value":true} == dead in the water
 ```
+
+## Run at least every three weeks
+
+The day view only reaches back to the Sunday that starts the week three weeks
+before the current one (verified 2026-10-23: from Friday 23 Oct, nothing before
+Sunday 27 Sep). Older days are gone from the phone, and from backups too. A run
+whose `FROM` has rolled off stops at the oldest day it can reach and reports
+from there.
 
 ## Accuracy: rows tear, so every value is voted on
 

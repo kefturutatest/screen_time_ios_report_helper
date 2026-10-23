@@ -184,6 +184,15 @@ class ScreenTime:
             nodes = [n for n, _ in wda.walk(tree)]
             texts = {wda.text_of(n) for n in nodes}
 
+            # Settings' search overlay hides the back button, so climbing out
+            # stalls until it is closed.
+            if any(n.get("type") == "SearchField" and self.visible(n) for n in nodes):
+                close = [n for n in nodes if n.get("type") == "Button" and self.visible(n)
+                         and (n.get("label") or "").lower() in ("cerrar", "cancelar", "close", "cancel")]
+                if close:
+                    self.tap_node(close[0], wait=1.2)
+                    continue
+
             # Already on the activity screen?
             if "Semana" in texts and "Día" in texts:
                 if self.current_date(today, tree)[0] is not None:
@@ -527,6 +536,13 @@ def main():
 
     days = {}
     incomplete = []
+
+    def save(days):
+        # After every day, so a long run that dies part-way (phone locks,
+        # oldest day rolled off) keeps everything it already read.
+        with open(args.out, "w") as f:
+            json.dump({"days": days, "generated": dt.datetime.now().isoformat()},
+                      f, indent=2, ensure_ascii=False)
     while True:
         st.log(f"· reading {cur} …")
         # A read that never reached the pickups header saw only part of the
@@ -544,15 +560,20 @@ def main():
             incomplete.append(cur.isoformat())
             st.log(f"    !! still incomplete — {cur} may be under-reported")
         days[cur.isoformat()] = apps
+        save(days)
         d.screenshot(os.path.join(SHOTS, f"day_{cur.isoformat()}.png"))
         st.log(f"    {len(apps)} apps")
         if cur <= d_from:
             break
-        cur, _ = st.step_day(ref, cur - dt.timedelta(days=1), back=True)
+        try:
+            cur, _ = st.step_day(ref, cur - dt.timedelta(days=1), back=True)
+        except RuntimeError as e:
+            # iOS keeps about four weeks of day detail; the oldest days of a
+            # long range can roll off. Keep what was read, and say so.
+            st.log(f"    !! stopped at {cur}: {e}")
+            d_from = cur
+            break
 
-    with open(args.out, "w") as f:
-        json.dump({"days": days, "generated": dt.datetime.now().isoformat()}, f,
-                  indent=2, ensure_ascii=False)
     st.log(f"\nraw data -> {args.out}")
 
     drop_torn_rows(days, log=st.log)
