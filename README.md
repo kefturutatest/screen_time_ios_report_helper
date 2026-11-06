@@ -205,6 +205,12 @@ by bundle id with separators normalised to spaces, so `google docs` matches
 another language needs the label constants near the top of
 `screentime_report.py` extended.
 
+Matching is exact (whole display name, or the tail of the bundle id), not
+substring: `tuflota` once also summed the dev build `pe.turuta.tuflota.dev`
+(7 h 55 min in one day) into TuFlota without a word. Apps that only contain
+the query are now listed under "Similar apps NOT counted"; pass them as their
+own app (e.g. `"tuflota dev"`) to count them.
+
 ## Files
 
 | file | what |

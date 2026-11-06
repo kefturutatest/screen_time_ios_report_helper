@@ -485,10 +485,20 @@ def match_app(query, bundle, name):
     Bundle separators become spaces so that e.g. "google docs" matches
     com.google.Docs — useful because the phone shows Google Docs under its
     localised name ("Documentos").
+
+    Exact, not substring: "tuflota" must not also sum pe.turuta.tuflota.dev
+    ("TuFlota Dev"), which it silently did for a whole week. Near-misses are
+    listed by `similar_app` instead so a new variant is seen, not merged.
     """
     q = norm(query)
     bundle_words = norm(re.sub(r"[.\-_]+", " ", bundle or ""))
-    return q in norm(name) or q in bundle_words
+    return q == norm(name) or bundle_words == q or bundle_words.endswith(" " + q)
+
+
+def similar_app(query, bundle, name):
+    q = norm(query)
+    bundle_words = norm(re.sub(r"[.\-_]+", " ", bundle or ""))
+    return (q in norm(name) or q in bundle_words) and not match_app(query, bundle, name)
 
 
 def main():
@@ -661,6 +671,18 @@ def print_report(days, apps, d_from, d_to):
                 print(f"  {a:<12} -> {nm}  [{bid}]")
         else:
             print(f"  {a:<12} -> (never appeared in this range)")
+
+    near = {}
+    for day in sorted(days):
+        for bid, info in days[day].items():
+            for a in apps:
+                if similar_app(a, bid, info["name"]):
+                    k = (a, bid, info["name"])
+                    near[k] = near.get(k, 0.0) + info["minutes"]
+    if near:
+        print("\nSimilar apps NOT counted (add them as their own app if wanted):")
+        for (a, bid, nm), mins in near.items():
+            print(f"  {a:<12} ~  {nm}  [{bid}]  {fmt_minutes(mins)} in range")
 
     shaky = [(day, info) for day in sorted(days) for bid, info in days[day].items()
              if info.get("disputed") and any(match_app(a, bid, info["name"]) for a in apps)]
